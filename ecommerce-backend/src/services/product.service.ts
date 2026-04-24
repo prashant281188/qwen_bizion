@@ -1,24 +1,40 @@
-import { db } from '../config/database.js';
-import { products, productVariants } from '../db/schema.js';
 import { eq, and, isNull } from 'drizzle-orm';
+import { db } from '../config/database.js';
+import { products, productVariants, type Product, type ProductVariant } from '../db/schema.js';
 import { CreateProductInput, UpdateProductInput, CreateVariantInput, UpdateVariantInput } from '../schemas/product.schema.js';
 
 export class ProductService {
   async getAllProducts(includeDeleted = false) {
-    const query = db.select().from(products);
+    const whereConditions = includeDeleted ? [] : [isNull(products.deletedAt)];
     
-    if (!includeDeleted) {
-      query.where(isNull(products.deletedAt));
-    }
-    
-    return await query;
+    return await db.query.products.findMany({
+      where: whereConditions.length ? and(...whereConditions) : undefined,
+      with: {
+        category: true,
+        brand: true,
+        hsnSacCode: true,
+        uom: true,
+        variants: true,
+      },
+      orderBy: (products, { desc }) => [desc(products.createdAt)],
+    });
   }
 
   async getProductById(id: string) {
-    const [product] = await db.select().from(products).where(
-      and(eq(products.id, id), isNull(products.deletedAt))
-    );
-    return product;
+    return await db.query.products.findFirst({
+      where: and(eq(products.id, id), isNull(products.deletedAt)),
+      with: {
+        category: true,
+        brand: true,
+        hsnSacCode: true,
+        uom: true,
+        variants: {
+          with: {
+            inventory: true,
+          }
+        },
+      },
+    });
   }
 
   async createProduct(data: CreateProductInput) {
@@ -32,6 +48,7 @@ export class ProductService {
       .set({ ...data, updatedAt: new Date() })
       .where(and(eq(products.id, id), isNull(products.deletedAt)))
       .returning();
+    
     return updatedProduct;
   }
 
@@ -41,17 +58,32 @@ export class ProductService {
       .set({ deletedAt: new Date(), updatedAt: new Date() })
       .where(and(eq(products.id, id), isNull(products.deletedAt)))
       .returning();
+    
     return deletedProduct;
   }
 
   async getVariantsByProductId(productId: string) {
-    return await db.select().from(productVariants).where(
-      and(eq(productVariants.productId, productId), isNull(productVariants.deletedAt))
-    );
+    return await db.query.productVariants.findMany({
+      where: and(eq(productVariants.productId, productId), isNull(productVariants.deletedAt)),
+      with: {
+        inventory: true,
+        priceHistory: {
+          limit: 1,
+          orderBy: (priceHistory, { desc }) => [desc(priceHistory.effectiveFrom)],
+        },
+      },
+    });
   }
 
   async createVariant(data: CreateVariantInput) {
     const [newVariant] = await db.insert(productVariants).values(data).returning();
+    
+    await db.insert(db.schema.inventory).values({
+      variantId: newVariant.id,
+      quantityOnHand: 0,
+      quantityReserved: 0,
+    });
+    
     return newVariant;
   }
 
@@ -61,6 +93,7 @@ export class ProductService {
       .set({ ...data, updatedAt: new Date() })
       .where(and(eq(productVariants.id, id), isNull(productVariants.deletedAt)))
       .returning();
+    
     return updatedVariant;
   }
 
@@ -70,6 +103,7 @@ export class ProductService {
       .set({ deletedAt: new Date(), updatedAt: new Date() })
       .where(and(eq(productVariants.id, id), isNull(productVariants.deletedAt)))
       .returning();
+    
     return deletedVariant;
   }
 }

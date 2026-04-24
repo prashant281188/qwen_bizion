@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import { ZodError } from 'zod';
 
 export class AppError extends Error {
   statusCode: number;
@@ -12,62 +13,53 @@ export class AppError extends Error {
   }
 }
 
-interface DatabaseError extends Error {
-  code?: string;
-}
-
 export const errorHandler = (
-  err: Error | AppError | DatabaseError,
+  err: Error | AppError | ZodError,
   req: Request,
   res: Response,
   next: NextFunction
-): void => {
+) => {
   console.error('Error:', err);
 
+  if (err instanceof ZodError) {
+    return res.status(400).json({
+      success: false,
+      message: 'Validation error',
+      errors: err.errors.map((e) => ({
+        field: e.path.join('.'),
+        message: e.message,
+      })),
+    });
+  }
+
   if (err instanceof AppError) {
-    res.status(err.statusCode).json({
+    return res.status(err.statusCode).json({
       success: false,
       message: err.message,
     });
-    return;
   }
 
-  // Handle Zod errors
-  if (err.name === 'ZodError') {
-    res.status(400).json({
+  if ((err as any).code === '23505') {
+    return res.status(409).json({
       success: false,
-      message: 'Validation error',
-      errors: err,
+      message: 'Duplicate entry detected',
     });
-    return;
   }
 
-  // Handle database errors
-  const dbErr = err as DatabaseError;
-  if (dbErr.code === '23505') {
-    res.status(409).json({
+  if ((err as any).code === '23503') {
+    return res.status(400).json({
       success: false,
-      message: 'Duplicate entry',
+      message: 'Referenced record not found',
     });
-    return;
   }
 
-  if (dbErr.code === '23503') {
-    res.status(400).json({
-      success: false,
-      message: 'Foreign key constraint violation',
-    });
-    return;
-  }
-
-  // Default error
-  res.status(500).json({
+  return res.status(500).json({
     success: false,
     message: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error',
   });
 };
 
-export const notFound = (req: Request, res: Response, next: NextFunction): void => {
+export const notFound = (req: Request, res: Response, next: NextFunction) => {
   const error = new AppError(`Not Found - ${req.originalUrl}`, 404);
   next(error);
 };

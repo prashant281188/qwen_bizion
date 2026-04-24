@@ -8,11 +8,11 @@ export const createProductSchema = z.object({
   brandId: z.string().uuid().optional(),
   hsnSacId: z.string().uuid(),
   uomId: z.string().uuid(),
-  weight: z.number().positive().optional().transform(v => v?.toString()),
-  length: z.number().positive().optional().transform(v => v?.toString()),
-  width: z.number().positive().optional().transform(v => v?.toString()),
-  height: z.number().positive().optional().transform(v => v?.toString()),
-  isActive: z.boolean().default(true),
+  weight: z.string().optional(),
+  length: z.string().optional(),
+  width: z.string().optional(),
+  height: z.string().optional(),
+  isActive: z.boolean().optional().default(true),
 });
 
 export const updateProductSchema = createProductSchema.partial();
@@ -22,12 +22,12 @@ export const createVariantSchema = z.object({
   sku: z.string().min(1).max(50),
   barcode: z.string().max(50).optional(),
   mpn: z.string().max(100).optional(),
-  currentPurchasePrice: z.number().positive().transform(v => v.toString()),
-  currentPurchasePriceIsTaxInclusive: z.boolean().default(false),
-  currentSellingPrice: z.number().positive().transform(v => v.toString()),
-  currentSellingPriceIsTaxInclusive: z.boolean().default(true),
-  currentMrp: z.number().positive().transform(v => v.toString()),
-  isActive: z.boolean().default(true),
+  currentPurchasePrice: z.string(),
+  currentPurchasePriceIsTaxInclusive: z.boolean().optional().default(false),
+  currentSellingPrice: z.string(),
+  currentSellingPriceIsTaxInclusive: z.boolean().optional().default(true),
+  currentMrp: z.string(),
+  isActive: z.boolean().optional().default(true),
 });
 
 export const updateVariantSchema = createVariantSchema.partial();
